@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+  <script>
+    let worker = null;
+    let currentLang = 'lua';
+
+    function postToParent(message) {
+      window.parent.postMessage(message, '*');
+    }
+
+    function stopWorker() {
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+    }
+
+    function startLuaWorker() {
+      stopWorker();
+
+      import('/src/lua.worker.js?worker&type=module').then((WorkerModule) => {
+        worker = new WorkerModule.default();
+        worker.onmessage = (event) => postToParent(event.data);
+        worker.onerror = (event) => {
+          postToParent({ type: 'ERROR', error: event.message || 'Falha ao executar o Worker de Lua.', lang: 'lua' });
+        };
+      }).catch((error) => {
+        postToParent({ type: 'ERROR', error: 'Falha ao carregar o Worker: ' + error.message, lang: 'lua' });
+      });
+    }
+
+    function startPythonWorker() {
+      stopWorker();
+
+      worker = new Worker('/python.worker.js');
+      worker.onmessage = (event) => postToParent(event.data);
+      worker.onerror = (event) => {
+        postToParent({ type: 'ERROR', error: event.message || 'Falha ao executar o Worker de Python.', lang: 'python' });
+      };
+      worker.postMessage({ type: 'INIT' });
+    }
+
+    function startWorker(lang) {
+      currentLang = lang || 'lua';
+
+      if (currentLang === 'lua') {
+        startLuaWorker();
+        return;
+      }
+
+      if (currentLang === 'python') {
+        startPythonWorker();
+        return;
+      }
+
+      postToParent({ type: 'ERROR', error: 'Linguagem não suportada: ' + currentLang, lang: currentLang });
+    }
+
+    window.addEventListener('message', (event) => {
+      const data = event.data || {};
+
+      if (data.type === 'INIT') {
+        startWorker(data.lang || currentLang);
+        return;
+      }
+
+      if (data.type === 'RUN') {
+        if (!worker) {
+          postToParent({ type: 'ERROR', error: 'O ambiente ainda não está pronto.', lang: currentLang });
+          return;
+        }
+
+        worker.postMessage({ type: 'RUN', code: data.code, lang: currentLang });
+      }
+    });
+  </script>
+</body>
+</html>

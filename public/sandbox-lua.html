@@ -11,8 +11,6 @@
       import('/src/lua.worker.js?worker&type=module').then((WorkerModule) => {
         worker = new WorkerModule.default();
         
-        // CORREÇÃO: Garante que TODO o objeto vindo do worker (com o tipo, saída e lang)
-        // seja enviado de volta para o componente React
         worker.onmessage = (e) => {
           window.parent.postMessage(e.data, '*');
         };
