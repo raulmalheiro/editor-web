@@ -1,4 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import CodeMirror from '@uiw/react-codemirror';
+import { StreamLanguage } from '@codemirror/language';
+import { python } from '@codemirror/lang-python';
+import { lua } from '@codemirror/legacy-modes/mode/lua';
 
 const LANGUAGE_OPTIONS = [
   { value: 'lua', label: 'Lua', icon: '🌙' },
@@ -21,6 +25,12 @@ export default function CodeRunner({ children, language = 'lua' }) {
   const [status, setStatus] = useState('Carregando...');
   const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage(language));
   const iframeRef = useRef(null);
+
+  const editorExtensions = useMemo(() => {
+    return selectedLanguage === 'python'
+      ? [python()]
+      : [StreamLanguage.define(lua)];
+  }, [selectedLanguage]);
 
   useEffect(() => {
     if (typeof children === 'string') {
@@ -95,13 +105,20 @@ export default function CodeRunner({ children, language = 'lua' }) {
         </select>
       </div>
 
-      <textarea
-        id="code-runner-code"
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        rows={5}
-        style={{ width: '100%', fontFamily: 'monospace' }}
-      />
+      <div style={{ border: '1px solid #ab47bc', borderRadius: '4px', overflow: 'hidden' }}>
+        <CodeMirror
+          value={code}
+          height="140px"
+          extensions={editorExtensions}
+          onChange={(value) => setCode(value)}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: false,
+            highlightActiveLine: false,
+            highlightActiveLineGutter: false,
+          }}
+        />
+      </div>
 
       <div style={{ marginTop: '8px', display: 'flex', gap: '10px' }}>
         <button
