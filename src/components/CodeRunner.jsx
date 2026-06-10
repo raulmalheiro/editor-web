@@ -4,33 +4,37 @@ import { StreamLanguage } from '@codemirror/language';
 import { python } from '@codemirror/lang-python';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
 
-const LANGUAGE_OPTIONS = [
-  { value: 'lua', label: 'Lua', icon: '🌙' },
-  { value: 'python', label: 'Python', icon: '🐍' },
+const DEFAULT_LANGUAGE_OPTIONS = [
+  { value: 'lua', label: 'Lua', icon: '🌙', engine: 'lua' },
+  { value: 'python', label: 'Python', icon: '🐍', engine: 'python' },
 ];
 
-function getInitialLanguage(language) {
-  return LANGUAGE_OPTIONS.some((option) => option.value === language)
+function getInitialLanguage(language, languages) {
+  return languages.some((option) => option.value === language)
     ? language
-    : LANGUAGE_OPTIONS[0].value;
+    : languages[0]?.value || DEFAULT_LANGUAGE_OPTIONS[0].value;
 }
 
 function getInitialCode(children) {
   return typeof children === 'string' ? children.trim() : '';
 }
 
-export default function CodeRunner({ children, language = 'lua' }) {
+export default function CodeRunner({ children, language = 'lua', languages = DEFAULT_LANGUAGE_OPTIONS }) {
   const [code, setCode] = useState(getInitialCode(children));
   const [output, setOutput] = useState('');
   const [status, setStatus] = useState('Carregando...');
-  const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage(language));
+  const [selectedLanguage, setSelectedLanguage] = useState(getInitialLanguage(language, languages));
   const iframeRef = useRef(null);
 
+  const normalizedLanguages = languages.length > 0 ? languages : DEFAULT_LANGUAGE_OPTIONS;
+  const selectedOption = normalizedLanguages.find((option) => option.value === selectedLanguage) || normalizedLanguages[0];
+  const selectedEngine = selectedOption?.engine || 'lua';
+
   const editorExtensions = useMemo(() => {
-    return selectedLanguage === 'python'
+    return selectedEngine === 'python'
       ? [python()]
       : [StreamLanguage.define(lua)];
-  }, [selectedLanguage]);
+  }, [selectedEngine]);
 
   useEffect(() => {
     if (typeof children === 'string') {
@@ -39,14 +43,20 @@ export default function CodeRunner({ children, language = 'lua' }) {
   }, [children]);
 
   useEffect(() => {
-    setSelectedLanguage(getInitialLanguage(language));
-  }, [language]);
+    setSelectedLanguage(getInitialLanguage(language, normalizedLanguages));
+  }, [language, normalizedLanguages]);
+
+  useEffect(() => {
+    if (!normalizedLanguages.some((option) => option.value === selectedLanguage)) {
+      setSelectedLanguage(normalizedLanguages[0]?.value || 'python');
+    }
+  }, [normalizedLanguages, selectedLanguage]);
 
   useEffect(() => {
     const handleMessage = (event) => {
       const data = event.data || {};
 
-      if (data.lang && data.lang !== selectedLanguage) return;
+      if (data.lang && data.lang !== selectedEngine) return;
 
       if (data.type === 'READY') {
         setStatus('Pronto');
@@ -68,7 +78,7 @@ export default function CodeRunner({ children, language = 'lua' }) {
     setOutput('');
 
     if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({ type: 'INIT', lang: selectedLanguage }, '*');
+      iframeRef.current.contentWindow.postMessage({ type: 'INIT', lang: selectedEngine }, '*');
     }
   };
 
@@ -76,11 +86,9 @@ export default function CodeRunner({ children, language = 'lua' }) {
     setStatus('Rodando...');
 
     if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({ type: 'RUN', code, lang: selectedLanguage }, '*');
+      iframeRef.current.contentWindow.postMessage({ type: 'RUN', code, lang: selectedEngine }, '*');
     }
   };
-
-  const selectedOption = LANGUAGE_OPTIONS.find((option) => option.value === selectedLanguage) || LANGUAGE_OPTIONS[0];
 
   return (
     <div style={{ border: '1px solid #ab47bc', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontFamily: 'sans-serif' }}>
@@ -97,7 +105,7 @@ export default function CodeRunner({ children, language = 'lua' }) {
           onChange={(e) => setSelectedLanguage(e.target.value)}
           style={{ border: '1px solid #ab47bc', borderRadius: '4px', padding: '5px 8px', backgroundColor: 'white' }}
         >
-          {LANGUAGE_OPTIONS.map((option) => (
+          {normalizedLanguages.map((option) => (
             <option key={option.value} value={option.value}>
               {option.icon} {option.label}
             </option>
